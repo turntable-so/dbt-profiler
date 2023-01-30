@@ -16,6 +16,7 @@
   "distinct_proportion",
   "distinct_count",
   "is_unique",
+  "most_common_values",
   "min",
   "max",
   "avg",
@@ -65,9 +66,29 @@
       {% endif %}
     ),
 
+    freqs AS (
+      {% for column_name in profile_column_names %}
+        select 
+          lower('{{ column_name }}') as column_name, 
+          object_agg(col,count) as most_common_values
+        from (
+          select
+            {{ adapter.quote(column_name) }} as col,
+            count(*) as count
+          from source_data
+          group by 1
+          order by 2
+          limit 3
+        )
+
+        {% if not loop.last %}union all{% endif %}
+      {% endfor %}
+    ),
+
     column_profiles as (
       {% for column_name in profile_column_names %}
         {% set data_type = data_type_map.get(column_name.lower(), "") %}
+
         select 
           lower('{{ column_name }}') as column_name,
           nullif(lower('{{ data_type }}'), '') as data_type,
@@ -123,6 +144,7 @@
       {% endfor %}
       profiled_at
     from column_profiles
+    full join freqs using(column_name)
     order by _column_position asc
   {% endset %}
 
